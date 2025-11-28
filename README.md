@@ -1,0 +1,1 @@
+将构建一个 manage-base的环境 使用 G1 inspire，环境来自Ego_benchmark

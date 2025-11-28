@@ -1,0 +1,17 @@
+[package]
+
+version = "0.0.1"
+
+title = "Manage-based EgoVLA Tasks With G1 Inspire"
+description = "Manager-based G1 Inspire environments derived from Ego Humanoid Benchmark."
+readme = "../../../../README.md"
+repository = ""
+category = "robotics"
+keywords = ["robotics", "rl", "g1", "egovla"]
+
+[dependencies]
+"isaaclab" = {}
+"isaaclab_assets" = {}
+
+[[python.module]]
+name = "spark_tasks"
