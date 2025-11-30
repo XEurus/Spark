@@ -6,9 +6,6 @@ import torch
 
 from isaaclab.managers import SceneEntityCfg
 
-from .observations import success_flag_open_laptop
-
-
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 

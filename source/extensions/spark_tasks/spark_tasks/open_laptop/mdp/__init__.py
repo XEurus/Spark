@@ -3,11 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""MDP helpers for the Spark open_laptop task.
-
-Re-export common MDP utilities from :mod:`isaaclab.envs.mdp` and add
-task-specific observation, reset and termination helpers.
-"""
+"""This sub-module contains the functions that are specific to the lift environments."""
 
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 

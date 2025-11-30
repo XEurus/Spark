@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spark_tasks"
+version = "0.0.1"
+description = "Manager-based G1 Inspire environments derived from Ego Humanoid Benchmark."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["robotics", "rl", "g1", "egovla"]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spark_tasks*"]

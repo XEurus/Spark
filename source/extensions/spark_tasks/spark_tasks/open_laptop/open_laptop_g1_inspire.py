@@ -32,7 +32,8 @@ from isaaclab.utils import configclass
 from . import mdp
 from isaaclab_assets.robots.unitree import G1_INSPIRE_FTP_CFG  # isort: skip
 # 这里使用的是 IsaacLab 里自带的 G1 Inspire 机器人配置
-from humanoid.tasks.data.laptop import LAPTOP_CFG  # 这里复用 humanoid.tasks 中笔记本的 ArticulationCfg
+
+from spark_tasks.data.laptop import LAPTOP_CFG  # 笔记本 ArticulationCfg
 
 
 @configclass
@@ -375,6 +376,7 @@ class Open_Laptop_G1_Inspire_EnvCfg(ManagerBasedRLEnvCfg):
 
     # 用于存放从 USD 转为 URDF 后的临时文件目录
     temp_urdf_dir = tempfile.gettempdir()
+   
 
     # 一个用于让机器人保持默认姿态的“空闲”动作
     idle_action = torch.tensor([
@@ -421,7 +423,7 @@ class Open_Laptop_G1_Inspire_EnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """在配置实例创建后自动调用，用来补充一些依赖场景的设置。"""
         # decimation：控制步长缩放（每控制一步仿真走多少小步）
-        self.decimation = 6
+        self.decimation = 4
         # 每个 episode 的最长时间（单位：秒）
         self.episode_length_s = 20.0
         # 仿真时间步长和渲染间隔
