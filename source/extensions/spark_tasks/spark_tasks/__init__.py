@@ -5,4 +5,4 @@ with task logic inspired by the Ego Humanoid Manipulation Benchmark.
 """
 
 # 直接导入子模块，触发 gym.register
-from . import open_laptop
+from . import g1_inspire_ego_benchmark

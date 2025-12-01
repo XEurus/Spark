@@ -28,39 +28,29 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
 from isaaclab.utils import configclass
-
+from . import object_table_env_cfg
 from . import mdp
 from isaaclab_assets.robots.unitree import G1_INSPIRE_FTP_CFG  # isort: skip
 # 这里使用的是 IsaacLab 里自带的 G1 Inspire 机器人配置
 
 from spark_tasks.data.laptop import LAPTOP_CFG  # 笔记本 ArticulationCfg
-
+ 
 
 @configclass
-class ObjectTableSceneCfg(InteractiveSceneCfg):
-    """场景配置：定义本任务中有哪些物体，以及它们的初始状态。
+class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
 
-    本场景包含：
-    - 一个笔记本（laptop）：来自 LAPTOP_CFG，并放置到机器人前方桌面附近
-    - 一个 G1 Inspire 机器人（robot）：站在原点附近
-    - 一个地面平面（ground）
-    - 一个环境光源（light）
-    """
-
-    # 笔记本：从 LAPTOP_CFG 复制一份，并修改在每个 env 下的 prim_path
     laptop: ArticulationCfg = LAPTOP_CFG.replace(
-        prim_path="/World/envs/env_.*/Laptop",
+        prim_path="/World/envs/env_.*/laptop",
     )
-    # 设置笔记本在世界坐标中的初始位置和姿态
-    laptop.init_state.pos = (0.6, 0.0, 1.03)
-    laptop.init_state.rot = (0.5, 0.5, 0.5, 0.5)
+    laptop.spawn.scale = (1, 1, 1)
+    laptop.init_state.pos = (0.60, 0.0, 0.72)
+    laptop.init_state.rot = (0.70711, 0.0, 0.0, 0.70711)
 
-    # 机器人：G1 Inspire，本任务中作为操作笔记本的主体
+    # Humanoid robot w/ arms higher
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot",
+        prim_path="/World/envs/env_.*/Robot",   
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0, 0, 1.0),
-            rot=(0.7071, 0, 0, 0.7071),
+            pos=(0, 0, 0.80),
             joint_pos={
                 "right_shoulder_pitch_joint": 0.0,
                 "right_shoulder_roll_joint": 0.0,
@@ -334,7 +324,7 @@ class EventCfg:
         mode="reset",
         params={
             "laptop_cfg": SceneEntityCfg("laptop"),
-            "randomize": True,
+            "randomize": False,
             "randomize_idx": -1,
             "randomize_range": 1.0,
         },

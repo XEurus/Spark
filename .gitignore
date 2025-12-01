@@ -1,5 +1,5 @@
-close_drawer
 pickplace_unitree_g1_inspire_hand_env_cfg.py
 __pycache__
 data
 *.egg-info
+observations_backup.py
