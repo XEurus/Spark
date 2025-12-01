@@ -44,7 +44,7 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
     )
     laptop.spawn.scale = (1, 1, 1)
     laptop.init_state.pos = (0.60, 0.0, 0.72)
-    laptop.init_state.rot = (0.70711, 0.0, 0.0, 0.70711)
+    laptop.init_state.rot = (0.5, 0.5, 0.5, 0.5)
 
     # Humanoid robot w/ arms higher
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
