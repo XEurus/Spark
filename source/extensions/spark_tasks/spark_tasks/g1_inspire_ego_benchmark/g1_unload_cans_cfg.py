@@ -237,6 +237,8 @@ class TerminationsCfg:
             "can1_cfg": SceneEntityCfg("can_fanta_1"),
             "can2_cfg": SceneEntityCfg("can_fanta_2"),
             "container_cfg": SceneEntityCfg("container"), # 默认未启用要求罐子竖立
+            "container_center_xy": (0.48, 0.0),
+            "container_half_extent_xy": (0.16, 0.10),
         },
     )
 

@@ -14,7 +14,7 @@ def reset_laptop_open(
     env: "ManagerBasedEnv",
     env_ids: torch.Tensor,  # 需要重置的环境 ID 列表（张量形式）
     laptop_cfg: SceneEntityCfg = SceneEntityCfg("laptop"),  # 指定笔记本在场景中的配置，默认名称为 "laptop"
-    randomize: bool = True,  # 是否对笔记本在 x/y 方向的位置进行随机扰动
+    randomize: bool = False,  # 是否对笔记本在 x/y 方向的位置进行随机扰动
     randomize_idx: int = -1,  # 如果 >= 0，使用固定网格上的确定位置；< 0 时使用连续随机采样
     randomize_range: float = 1.0,  # 随机扰动的范围缩放系数
 ) -> None:
@@ -36,31 +36,30 @@ def reset_laptop_open(
     laptop_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
 
     # ===== 位置随机化部分（可选）=====
-    if randomize:
-        # randomize_idx < 0：使用连续的随机扰动
-        if randomize_idx < 0:
-            # 在 [-0.1, 0.1] * randomize_range 范围内随机生成 x/y 偏移
-            # rand_xy 的形状为 [num_envs, 2]，分别对应 x 和 y 的偏移量
-            rand_xy = (0.20 * randomize_range) * torch.rand((len(env_ids), 2), device=laptop.device) - (
-                0.1 * randomize_range
-            )
-            # 将随机偏移加到根状态的 x/y 坐标上
-            laptop_root_state[:, 0:2] += rand_xy
-        else:
-            # randomize_idx >= 0：使用 100x100 的规则网格，在 [-0.1, 0.1] 范围内取一个确定位置
-            # 计算网格列索引（相当于 x 方向）
-            column_idx = randomize_idx // 100
-            # 计算网格行索引（相当于 y 方向）
-            row_idx = randomize_idx % 100
-            # 根据行列索引映射到 [-0.1, 0.1] 区间中的具体坐标（y 方向）
-            laptop_root_state[:, 1] += 0.1 - (0.2 / 99) * row_idx
-            # 根据行列索引映射到 [-0.1, 0.1] 区间中的具体坐标（x 方向）
-            laptop_root_state[:, 0] += 0.1 - (0.2 / 99) * column_idx
+    # if randomize:
+    #     # randomize_idx < 0：使用连续的随机扰动
+    #     if randomize_idx < 0:
+    #         # 在 [-0.1, 0.1] * randomize_range 范围内随机生成 x/y 偏移
+    #         # rand_xy 的形状为 [num_envs, 2]，分别对应 x 和 y 的偏移量
+    #         rand_xy = (0.20 * randomize_range) * torch.rand((len(env_ids), 2), device=laptop.device) - (
+    #             0.1 * randomize_range
+    #         )
+    #         # 将随机偏移加到根状态的 x/y 坐标上
+    #         laptop_root_state[:, 0:2] += rand_xy
+    #     else:
+    #         # randomize_idx >= 0：使用 100x100 的规则网格，在 [-0.1, 0.1] 范围内取一个确定位置
+    #         # 计算网格列索引（相当于 x 方向）
+    #         column_idx = randomize_idx // 100
+    #         # 计算网格行索引（相当于 y 方向）
+    #         row_idx = randomize_idx % 100
+    #         # 根据行列索引映射到 [-0.1, 0.1] 区间中的具体坐标（y 方向）
+    #         laptop_root_state[:, 1] += 0.1 - (0.2 / 99) * row_idx
+    #         # 根据行列索引映射到 [-0.1, 0.1] 区间中的具体坐标（x 方向）
+    #         laptop_root_state[:, 0] += 0.1 - (0.2 / 99) * column_idx
 
     # 将更新后的根状态一次性写回到仿真中，应用到所有指定 env_ids 的笔记本
     laptop.write_root_state_to_sim(laptop_root_state, env_ids=env_ids)
     laptop_root_state = laptop.data.default_root_state[env_ids].clone()
-    print("default_root_state quat:", laptop_root_state[0, 3:7])
     # ===== 关节状态重置部分 =====
     # 取出这些环境中笔记本的默认关节位置（例如：盖子的初始开合角度等）
     joint_pos = laptop.data.default_joint_pos[env_ids]
@@ -189,11 +188,6 @@ def reset_unload_cans_objects(
     can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
     container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
 ) -> None:
-    """Reset cans and container for the unload_cans task.
-    - Sample a shared XY offset for this episode (or use a deterministic grid index).
-    - Apply the same offset to both cans and the container in the local env frame.
-    - Place roots around their default poses shifted by ``env.scene.env_origins``.
-    """
     can1 = env.scene[can1_cfg.name]
     can2 = env.scene[can2_cfg.name]
     container = env.scene[container_cfg.name]
@@ -234,25 +228,14 @@ def reset_unload_cans_objects(
 def reset_sort_cans_objects(
     env: "ManagerBasedEnv",
     env_ids: torch.Tensor,
-    randomize: bool = True,
-    randomize_idx: int = -1,
-    randomize_range: float = 1.0,
+    # randomize: bool = True,
+    # randomize_idx: int = -1,
+    # randomize_range: float = 1.0,
     can_sprite1_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_1"),
     can_sprite2_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_2"),
     can_fanta1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
     can_fanta2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
 ) -> None:
-    """Reset the four cans for the sort_cans task.
-
-    Mirrors Ego's ``SortCansEnv._reset_idx``:
-
-    - For each can, start from its default root state.
-    - Optionally randomize XY within a small square (shared range, per-can sample).
-    - If ``randomize_idx >= 0``, use a deterministic grid layout that
-      distinguishes left/right cans.
-    - Finally, shift all roots by ``env.scene.env_origins`` and write
-      them back to the simulation.
-    """
 
     can_sprite_1 = env.scene[can_sprite1_cfg.name]
     can_sprite_2 = env.scene[can_sprite2_cfg.name]
@@ -264,32 +247,32 @@ def reset_sort_cans_objects(
     for can_idx, can in enumerate(cans):
         root_state = can.data.default_root_state[env_ids].clone()
 
-        if randomize:
-            if randomize_idx < 0:
-                # uniform noise in XY, scaled by randomize_range
-                noise_xy = (randomize_range * 0.12) * torch.rand(
-                    (len(env_ids), 2), device=can.device
-                ) - (0.06 * randomize_range)
-                root_state[:, 0:2] += noise_xy
-            else:
-                # deterministic grid layout, same logic as Ego:
-                # randomize_idx encodes left/right grid indices.
-                left_cans_idx = randomize_idx // 100
-                left_cans_column_idx = left_cans_idx // 10
-                left_cans_row_idx = left_cans_idx % 10
+        # if randomize:
+        #     if randomize_idx < 0:
+        #         # uniform noise in XY, scaled by randomize_range
+        #         noise_xy = (randomize_range * 0.12) * torch.rand(
+        #             (len(env_ids), 2), device=can.device
+        #         ) - (0.06 * randomize_range)
+        #         root_state[:, 0:2] += noise_xy
+        #     else:
+        #         # deterministic grid layout, same logic as Ego:
+        #         # randomize_idx encodes left/right grid indices.
+        #         left_cans_idx = randomize_idx // 100
+        #         left_cans_column_idx = left_cans_idx // 10
+        #         left_cans_row_idx = left_cans_idx % 10
 
-                right_cans_idx = randomize_idx % 100
-                right_cans_column_idx = right_cans_idx // 10
-                right_cans_row_idx = right_cans_idx % 10
+        #         right_cans_idx = randomize_idx % 100
+        #         right_cans_column_idx = right_cans_idx // 10
+        #         right_cans_row_idx = right_cans_idx % 10
 
-                if can_idx in (0, 2):
-                    # can_sprite_1 and can_fanta_1 (right side)
-                    root_state[:, 1] += 0.06 - (0.12 / 9.0) * right_cans_row_idx
-                    root_state[:, 0] += 0.06 - (0.12 / 9.0) * right_cans_column_idx
-                else:
-                    # can_sprite_2 and can_fanta_2 (left side)
-                    root_state[:, 1] += 0.06 - (0.12 / 9.0) * left_cans_row_idx
-                    root_state[:, 0] += 0.06 - (0.12 / 9.0) * left_cans_column_idx
+        #         if can_idx in (0, 2):
+        #             # can_sprite_1 and can_fanta_1 (right side)
+        #             root_state[:, 1] += 0.06 - (0.12 / 9.0) * right_cans_row_idx
+        #             root_state[:, 0] += 0.06 - (0.12 / 9.0) * right_cans_column_idx
+        #         else:
+        #             # can_sprite_2 and can_fanta_2 (left side)
+        #             root_state[:, 1] += 0.06 - (0.12 / 9.0) * left_cans_row_idx
+        #             root_state[:, 0] += 0.06 - (0.12 / 9.0) * left_cans_column_idx
 
         # move into world frame around env origins
         root_state[:, 0:3] += env.scene.env_origins[env_ids, :]

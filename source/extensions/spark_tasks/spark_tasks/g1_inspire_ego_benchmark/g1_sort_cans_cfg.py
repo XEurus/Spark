@@ -8,7 +8,7 @@ from pink.tasks import FrameTask
 
 import isaaclab.controllers.utils as ControllerUtils
 import isaaclab.envs.mdp as base_mdp
-from isaaclab.assets import ArticulationCfg, RigidObjectCfg
+from isaaclab.assets import ArticulationCfg, RigidObjectCfg, AssetBaseCfg
 from isaaclab.controllers.pink_ik import NullSpacePostureTask, PinkIKControllerCfg
 from isaaclab.devices.device_base import DevicesCfg
 from isaaclab.devices.openxr import ManusViveCfg, OpenXRDeviceCfg, XrCfg
@@ -35,11 +35,13 @@ from spark_tasks.data.container import CONTAINER_PLASTIC_CFG
 
 @configclass
 class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
+    #这边看到机器人手的初始位置挡住了罐子，所以挪了一下，容器和罐子距离机器人的比例和原有的可能会发生一些变化
+    #容器我只看得到影子，但是看不到具体素材，所以高度可能还有一些问题需要调整 见notion
     can_sprite_1: RigidObjectCfg = CAN_SPRITE_CFG.replace(
         prim_path="/World/envs/env_.*/CanSprite1",
     )
     can_sprite_1.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.42, -0.33, 1.02),
+        pos=(0.52, -0.33, 0.715),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
@@ -47,7 +49,7 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/CanSprite2",
     )
     can_sprite_2.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.42, 0.33, 1.02),
+        pos=(0.52, 0.33, 0.715),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
@@ -55,7 +57,7 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/CanRed1",
     )
     can_fanta_1.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.52, -0.33, 1.02),
+        pos=(0.62, -0.33, 0.715),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
@@ -63,24 +65,26 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/CanRed2",
     )
     can_fanta_2.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.52, 0.33, 1.02),
+        pos=(0.62, 0.33, 0.715),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
-    container_1: RigidObjectCfg = CONTAINER_PLASTIC_CFG.replace(
+    container_1: AssetBaseCfg = AssetBaseCfg(
         prim_path="/World/envs/env_.*/Container1",
-    )
-    container_1.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.6, 0.085, 1.1),
-        rot=(0.70711, 0.0, 0.0, -0.70711),
+        spawn=CONTAINER_PLASTIC_CFG.spawn,
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.65, 0.085, 0.76),
+            rot=(0.70711, 0.0, 0.0, -0.70711),
+        ),
     )
 
-    container_2: RigidObjectCfg = CONTAINER_PLASTIC_CFG.replace(
+    container_2: AssetBaseCfg = AssetBaseCfg(
         prim_path="/World/envs/env_.*/Container2",
-    )
-    container_2.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.6, -0.085, 1.1),
-        rot=(0.70711, 0.0, 0.0, -0.70711),
+        spawn=CONTAINER_PLASTIC_CFG.spawn,
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.65, -0.085, 0.76),
+            rot=(0.70711, 0.0, 0.0, -0.70711),
+        ),
     )
 
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
@@ -214,73 +218,25 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         actions = ObsTerm(func=base_mdp.last_action)
-        robot_joint_pos = ObsTerm(
-            func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
-        robot_root_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
-        robot_root_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
+        robot_joint_pos = ObsTerm(func=base_mdp.joint_pos,params={"asset_cfg": SceneEntityCfg("robot")})
+        robot_root_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("robot")})
+        robot_root_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("robot")})
         robot_links_state = ObsTerm(func=mdp.get_all_robot_link_state)
 
-        can_sprite_1_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("can_sprite_1")},
-        )
-        can_sprite_1_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("can_sprite_1")},
-        )
-        can_sprite_2_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("can_sprite_2")},
-        )
-        can_sprite_2_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("can_sprite_2")},
-        )
-        can_fanta_1_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("can_fanta_1")},
-        )
-        can_fanta_1_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("can_fanta_1")},
-        )
-        can_fanta_2_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("can_fanta_2")},
-        )
-        can_fanta_2_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("can_fanta_2")},
-        )
+        left_eef_pos = ObsTerm(func=mdp.get_eef_pos,params={"link_name": "left_wrist_yaw_link"},)
+        left_eef_quat = ObsTerm(func=mdp.get_eef_quat,params={"link_name": "left_wrist_yaw_link"},)
+        right_eef_pos = ObsTerm(func=mdp.get_eef_pos,params={"link_name": "right_wrist_yaw_link"},)
+        right_eef_quat = ObsTerm(func=mdp.get_eef_quat,params={"link_name": "right_wrist_yaw_link"},)
+        hand_joint_state = ObsTerm(func=mdp.get_robot_joint_state,params={"joint_names": ["R_.*", "L_.*"]},)
 
-        left_eef_pos = ObsTerm(
-            func=mdp.get_eef_pos,
-            params={"link_name": "left_wrist_yaw_link"},
-        )
-        left_eef_quat = ObsTerm(
-            func=mdp.get_eef_quat,
-            params={"link_name": "left_wrist_yaw_link"},
-        )
-        right_eef_pos = ObsTerm(
-            func=mdp.get_eef_pos,
-            params={"link_name": "right_wrist_yaw_link"},
-        )
-        right_eef_quat = ObsTerm(
-            func=mdp.get_eef_quat,
-            params={"link_name": "right_wrist_yaw_link"},
-        )
-        hand_joint_state = ObsTerm(
-            func=mdp.get_robot_joint_state,
-            params={"joint_names": ["R_.*", "L_.*"]},
-        )
+        can_sprite_1_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("can_sprite_1")},)
+        can_sprite_1_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("can_sprite_1")},)
+        can_sprite_2_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("can_sprite_2")},)
+        can_sprite_2_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("can_sprite_2")},)
+        can_fanta_1_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("can_fanta_1")},)
+        can_fanta_1_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("can_fanta_1")},)
+        can_fanta_2_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("can_fanta_2")},)
+        can_fanta_2_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("can_fanta_2")},)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -299,9 +255,12 @@ class TerminationsCfg:
             "can_sprite2_cfg": SceneEntityCfg("can_sprite_2"),
             "can_fanta1_cfg": SceneEntityCfg("can_fanta_1"),
             "can_fanta2_cfg": SceneEntityCfg("can_fanta_2"),
+            "container_left_center": (0.65, 0.085, 0.76),
+            "container_right_center": (0.65, -0.085, 0.76),
+            "up_half_extent": (0.12, 0.075, 0.05),
+            "down_half_extent": (0.13, 0.075, 0.08),
         },
     )
-
 
 @configclass
 class EventCfg:
@@ -311,16 +270,12 @@ class EventCfg:
         func=mdp.reset_sort_cans_objects,
         mode="reset",
         params={
-            "randomize": True,
-            "randomize_idx": -1,
-            "randomize_range": 1.0,
             "can_sprite1_cfg": SceneEntityCfg("can_sprite_1"),
             "can_sprite2_cfg": SceneEntityCfg("can_sprite_2"),
             "can_fanta1_cfg": SceneEntityCfg("can_fanta_1"),
             "can_fanta2_cfg": SceneEntityCfg("can_fanta_2"),
         },
     )
-
 
 @configclass
 class G1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):

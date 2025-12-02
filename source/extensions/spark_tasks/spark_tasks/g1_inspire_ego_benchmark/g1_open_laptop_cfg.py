@@ -311,9 +311,6 @@ class EventCfg:
         mode="reset",
         params={
             "laptop_cfg": SceneEntityCfg("laptop"),
-            "randomize": False,
-            "randomize_idx": -1,
-            "randomize_range": 1.0,
         },
     )
 

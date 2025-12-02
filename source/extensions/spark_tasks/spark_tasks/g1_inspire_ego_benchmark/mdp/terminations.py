@@ -398,17 +398,13 @@ def task_done_unload_cans(
     require_upright_and_height: bool = False,
     up_z_threshold: float = 0.5,
     min_height: float = 1.0,
+    container_center_xy=(0.48, 0.0),
+    container_half_extent_xy=(0.16, 0.10),
 ) -> torch.Tensor:
-    """Success condition for the unload_cans task.
-
-    Mirrors Ego's :meth:`UnloadCansEnv._get_success` container occupancy logic:
-
-    - Work in env-local coordinates (subtract ``env.scene.env_origins``).
-    - Compute a bounding box around the container using the same base
-      lower/upper limits ``[0.32, -0.1]`` and ``[0.64, 0.1]``.
-    - Shift that box by an offset inferred from the container current
-      position so it stays aligned even when randomized.
-    - Episode is successful if *both* cans lie outside that box.
+    """
+    - First compute the container’s bounding box in the x–y plane using its env-local position.
+    - The base footprint is defined by a nominal center ``[0.48, 0.0]`` and half extents ``[0.16, 0.10]``, which are then shifted by the container’s current position (via an inferred XY offset).
+    - The episode is considered successful if and only if both cans lie outside this bounding box.
     """
 
     can1 = env.scene[can1_cfg.name]
@@ -423,12 +419,14 @@ def task_done_unload_cans(
     device = container_pos.device
 
     # Base container footprint (in env frame) and its nominal center.
-    center_ref = torch.tensor([0.48, 0.0], device=device)
-    container_xy_lower_ref = torch.tensor([0.32, -0.10], device=device)
-    container_xy_upper_ref = torch.tensor([0.64, 0.10], device=device)
+    container_center_ref = torch.tensor(container_center_xy, device=device)
+    # half-width/half-height of the container footprint in XY
+    container_half_extent = torch.tensor(container_half_extent_xy, device=device)
+    container_xy_lower_ref = container_center_ref - container_half_extent
+    container_xy_upper_ref = container_center_ref + container_half_extent
 
     # Infer per-env XY offset from current container position.
-    offset_xy = container_pos[:, 0:2] - center_ref 
+    offset_xy = container_pos[:, 0:2] - container_center_ref 
     # 随机偏移量offset_xy 通过容器位置传导。现在没有随机偏移，但是保存这一逻辑
     lower_xy = container_xy_lower_ref + offset_xy
     upper_xy = container_xy_upper_ref + offset_xy
@@ -477,16 +475,17 @@ def task_done_sort_cans(
     can_sprite2_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_2"),
     can_fanta1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
     can_fanta2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_left_center=(0.65, 0.085, 0.76),
+    container_right_center=(0.65, -0.085, 0.76),
+    up_half_extent=(0.12, 0.075, 0.05),
+    down_half_extent=(0.13, 0.075, 0.08),
 ) -> torch.Tensor:
-    """Success condition for the sort_cans task.
-
-    Mirrors Ego's :meth:`SortCansEnv._get_success` container-box logic:
-
+    """
     - Two red cans (Fanta) must lie *inside* the right container box.
     - Two orange cans (Sprite) must lie *inside* the left container box.
     - Coordinates are evaluated in env-local frame (subtract env origins).
     """
-
+    # positions in env-local coordinates
     can_sprite_1 = env.scene[can_sprite1_cfg.name]
     can_sprite_2 = env.scene[can_sprite2_cfg.name]
     can_fanta_1 = env.scene[can_fanta1_cfg.name]
@@ -500,11 +499,23 @@ def task_done_sort_cans(
 
     device = sprite1_pos.device
 
-    # Container boxes (top-left / bottom-right) as in Ego, in env-local frame.
-    right_top_left = torch.tensor([0.72, -0.015, 1.15], device=device)
-    right_bot_right = torch.tensor([0.47, -0.16, 1.02], device=device)
-    left_top_left = torch.tensor([0.72, 0.1592, 1.15], device=device)
-    left_bot_right = torch.tensor([0.47, 0.007, 1.02], device=device)
+    # Container centers in env-local frame (from inputs)
+    # container_1: left container (y > 0), container_2: right container (y < 0)
+    container_1 = torch.tensor(container_left_center, device=device)
+    container_2 = torch.tensor(container_right_center, device=device)
+
+    # Half extents of the container boxes
+    up = torch.tensor(up_half_extent, device=device)  # 这边可能需要测试后调整
+    down = torch.tensor(down_half_extent, device=device)
+
+    right_center = container_2
+    left_center = container_1
+
+    # Container boxes (top-left / bottom-right) expressed as center +/- half extents
+    right_top_left = right_center + up
+    right_bot_right = right_center - down
+    left_top_left = left_center + up
+    left_bot_right = left_center - down
 
     def in_box(pos: torch.Tensor, bot_right: torch.Tensor, top_left: torch.Tensor) -> torch.Tensor:
         inside = torch.logical_and(pos > bot_right, pos < top_left)
@@ -523,7 +534,6 @@ def task_done_sort_cans(
     done = torch.logical_and(fanta_sorted, sprite_sorted)
 
     return done
-
 
 def task_done_stack_can(
     env: "ManagerBasedRLEnv",
