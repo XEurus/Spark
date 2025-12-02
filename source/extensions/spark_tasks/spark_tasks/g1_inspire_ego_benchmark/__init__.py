@@ -3,9 +3,6 @@ Humanoid heat food environment.
 """
 
 import gymnasium as gym
-
-from .open_laptop_g1_inspire import Open_Laptop_G1_Inspire_EnvCfg
-
 from . import agents
 
 ##
@@ -32,6 +29,56 @@ gym.register(
     disable_env_checker=True,
 )
 
+
+gym.register(
+    id="G1-Stack-Can-Into-Drawer-Inspire-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_stack_can_into_drawer_cfg:G1InspireFTPEnvCfg",
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="G1-Stack-Can-Inspire-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_stack_can_cfg:G1InspireFTPEnvCfg",
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="G1-Sort-Cans-Inspire-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_sort_cans_cfg:G1InspireFTPEnvCfg",
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="G1-Open-Laptop-Inspire-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_open_laptop_cfg:G1InspireFTPEnvCfg",
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+    disable_env_checker=True,
+)
+
+gym.register(
+    id="G1-Unload-Cans-Inspire-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.g1_unload_cans_cfg:G1InspireFTPEnvCfg",
+        "robomimic_bc_cfg_entry_point": f"{agents.__name__}:robomimic/bc_rnn_low_dim.json",
+    },
+    disable_env_checker=True,
+)
 
 # gym.register(
 #     id="Isaac-PickPlace-GR1T2-Abs-v0",
@@ -82,10 +129,3 @@ gym.register(
 #     },
 #     disable_env_checker=True,
 # )
-
-gym.register(
-    id="Spark-Open-Laptop-G1Inspire-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={"env_cfg_entry_point": Open_Laptop_G1_Inspire_EnvCfg},
-)

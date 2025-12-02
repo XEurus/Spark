@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
+import isaaclab.utils.math as math_utils
 
 from isaaclab.managers import SceneEntityCfg
 
@@ -387,5 +388,219 @@ def task_done_exhaust_pipe(
     done = torch.logical_and(done, blue_exhaust_to_bin_y < max_blue_exhaust_to_bin_y)
     done = torch.logical_and(done, blue_exhaust_to_bin_y > min_blue_exhaust_to_bin_y)
     done = torch.logical_and(done, blue_exhaust_to_bin_z < max_blue_exhaust_to_bin_z)
+
+
+def task_done_unload_cans(
+    env,
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+    require_upright_and_height: bool = False,
+    up_z_threshold: float = 0.5,
+    min_height: float = 1.0,
+) -> torch.Tensor:
+    """Success condition for the unload_cans task.
+
+    Mirrors Ego's :meth:`UnloadCansEnv._get_success` container occupancy logic:
+
+    - Work in env-local coordinates (subtract ``env.scene.env_origins``).
+    - Compute a bounding box around the container using the same base
+      lower/upper limits ``[0.32, -0.1]`` and ``[0.64, 0.1]``.
+    - Shift that box by an offset inferred from the container current
+      position so it stays aligned even when randomized.
+    - Episode is successful if *both* cans lie outside that box.
+    """
+
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    # positions in env-local frame
+    can1_pos = can1.data.root_pos_w - env.scene.env_origins
+    can2_pos = can2.data.root_pos_w - env.scene.env_origins
+    container_pos = container.data.root_pos_w - env.scene.env_origins
+
+    device = container_pos.device
+
+    # Base container footprint (in env frame) and its nominal center.
+    center_ref = torch.tensor([0.48, 0.0], device=device)
+    container_xy_lower_ref = torch.tensor([0.32, -0.10], device=device)
+    container_xy_upper_ref = torch.tensor([0.64, 0.10], device=device)
+
+    # Infer per-env XY offset from current container position.
+    offset_xy = container_pos[:, 0:2] - center_ref 
+    # 随机偏移量offset_xy 通过容器位置传导。现在没有随机偏移，但是保存这一逻辑
+    lower_xy = container_xy_lower_ref + offset_xy
+    upper_xy = container_xy_upper_ref + offset_xy
+
+    # Check whether cans are inside the container XY box.
+    can1_in_x = torch.logical_and(can1_pos[:, 0] > lower_xy[:, 0], can1_pos[:, 0] < upper_xy[:, 0])
+    can1_in_y = torch.logical_and(can1_pos[:, 1] > lower_xy[:, 1], can1_pos[:, 1] < upper_xy[:, 1])
+    can2_in_x = torch.logical_and(can2_pos[:, 0] > lower_xy[:, 0], can2_pos[:, 0] < upper_xy[:, 0])
+    can2_in_y = torch.logical_and(can2_pos[:, 1] > lower_xy[:, 1], can2_pos[:, 1] < upper_xy[:, 1])
+
+    can1_in_container = torch.logical_and(can1_in_x, can1_in_y)
+    can2_in_container = torch.logical_and(can2_in_x, can2_in_y)
+
+    any_in_container = torch.logical_or(can1_in_container, can2_in_container)
+    done = torch.logical_not(any_in_container) # 要没有一个罐子在容器内 not any_in_container
+
+    if require_upright_and_height:
+        # height in env-local frame
+        can1_z = can1_pos[:, 2]
+        can2_z = can2_pos[:, 2]
+
+        # z-axis of each can in world frame
+        z_axis = torch.zeros_like(can1_pos)
+        z_axis[:, 2] = 1.0
+        z_can1 = math_utils.quat_apply(can1.data.root_quat_w, z_axis)
+        z_can2 = math_utils.quat_apply(can2.data.root_quat_w, z_axis)
+
+        can1_up = z_can1[:, 2] > up_z_threshold
+        can2_up = z_can2[:, 2] > up_z_threshold
+        can1_high = can1_z > min_height
+        can2_high = can2_z > min_height
+
+        upright1 = torch.logical_and(can1_up, can1_high)
+        upright2 = torch.logical_and(can2_up, can2_high)
+        both_upright = torch.logical_and(upright1, upright2)
+
+        done = torch.logical_and(done, both_upright)
+
+    return done
+# 子任务应该是还有一个卸载成功（要保持罐子竖起来）和拿起成功、成功到达。
+# 目前ego内不要求罐子竖立，但是与ego代码保持一致，保留这一逻辑。
+
+def task_done_sort_cans(
+    env: "ManagerBasedRLEnv",
+    can_sprite1_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_1"),
+    can_sprite2_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_2"),
+    can_fanta1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can_fanta2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+) -> torch.Tensor:
+    """Success condition for the sort_cans task.
+
+    Mirrors Ego's :meth:`SortCansEnv._get_success` container-box logic:
+
+    - Two red cans (Fanta) must lie *inside* the right container box.
+    - Two orange cans (Sprite) must lie *inside* the left container box.
+    - Coordinates are evaluated in env-local frame (subtract env origins).
+    """
+
+    can_sprite_1 = env.scene[can_sprite1_cfg.name]
+    can_sprite_2 = env.scene[can_sprite2_cfg.name]
+    can_fanta_1 = env.scene[can_fanta1_cfg.name]
+    can_fanta_2 = env.scene[can_fanta2_cfg.name]
+
+    # positions in env-local coordinates
+    sprite1_pos = can_sprite_1.data.root_pos_w - env.scene.env_origins
+    sprite2_pos = can_sprite_2.data.root_pos_w - env.scene.env_origins
+    fanta1_pos = can_fanta_1.data.root_pos_w - env.scene.env_origins
+    fanta2_pos = can_fanta_2.data.root_pos_w - env.scene.env_origins
+
+    device = sprite1_pos.device
+
+    # Container boxes (top-left / bottom-right) as in Ego, in env-local frame.
+    right_top_left = torch.tensor([0.72, -0.015, 1.15], device=device)
+    right_bot_right = torch.tensor([0.47, -0.16, 1.02], device=device)
+    left_top_left = torch.tensor([0.72, 0.1592, 1.15], device=device)
+    left_bot_right = torch.tensor([0.47, 0.007, 1.02], device=device)
+
+    def in_box(pos: torch.Tensor, bot_right: torch.Tensor, top_left: torch.Tensor) -> torch.Tensor:
+        inside = torch.logical_and(pos > bot_right, pos < top_left)
+        return inside.all(dim=-1)
+
+    # Fanta cans should be in the right container box
+    fanta1_in_right = in_box(fanta1_pos, right_bot_right, right_top_left)
+    fanta2_in_right = in_box(fanta2_pos, right_bot_right, right_top_left)
+    fanta_sorted = torch.logical_and(fanta1_in_right, fanta2_in_right)
+
+    # Sprite cans should be in the left container box
+    sprite1_in_left = in_box(sprite1_pos, left_bot_right, left_top_left)
+    sprite2_in_left = in_box(sprite2_pos, left_bot_right, left_top_left)
+    sprite_sorted = torch.logical_and(sprite1_in_left, sprite2_in_left)
+
+    done = torch.logical_and(fanta_sorted, sprite_sorted)
+
+    return done
+
+
+def task_done_stack_can(
+    env: "ManagerBasedRLEnv",
+    can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
+    plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
+    plate_radius: float = 0.09,
+    vertical_tolerance: float = 0.02,
+) -> torch.Tensor:
+    """Success condition for the stack_can task.
+
+    Mirrors Ego's :meth:`StackCanEnv._get_success`:
+
+    - Compute horizontal (XY) distance between can and plate centers.
+    - Compute vertical (Z) distance between can and plate.
+    - Task is successful when horizontal distance is within ``plate_radius``
+      and vertical distance is below ``vertical_tolerance``.
+    """
+
+    can = env.scene[can_cfg.name]
+    plate = env.scene[plate_cfg.name]
+
+    # positions relative to environment origin
+    can_pos = can.data.root_pos_w - env.scene.env_origins
+    plate_pos = plate.data.root_pos_w - env.scene.env_origins
+
+    diff = can_pos - plate_pos
+    dist_horizontal = torch.norm(diff[:, :2], dim=-1)
+    dist_vertical = torch.abs(diff[:, 2])
+
+    done = dist_horizontal < plate_radius
+    done = torch.logical_and(done, dist_vertical < vertical_tolerance)
+
+    return done
+
+
+def task_done_stack_can_into_drawer(
+    env: "ManagerBasedRLEnv",
+    can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
+    plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
+    drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
+    drawer_bottom_joint_id: int = 1,
+    close_ratio: float = 0.90,
+    plate_radius: float = 0.09,
+    vertical_tolerance: float = 0.02,
+) -> torch.Tensor:
+    """Success for stack_can_into_drawer task.
+
+    Mirrors Ego's :meth:`StackCanIntoDrawerEnv._get_success` and
+    ``_get_joints_data``:
+
+    - Can must be horizontally within ``plate_radius`` of the plate.
+    - Vertical distance between can and plate must be below
+      ``vertical_tolerance``.
+    - Drawer bottom joint must be sufficiently closed (>= close_ratio of
+      its upper joint limit).
+    """
+
+    can = env.scene[can_cfg.name]
+    plate = env.scene[plate_cfg.name]
+    drawer = env.scene[drawer_cfg.name]
+
+    # ---- can on plate (env-local) ----
+    can_pos = can.data.root_pos_w - env.scene.env_origins
+    plate_pos = plate.data.root_pos_w - env.scene.env_origins
+
+    diff = can_pos - plate_pos
+    dist_horizontal = torch.norm(diff[:, :2], dim=-1)
+    dist_vertical = torch.abs(diff[:, 2])
+
+    stacked = dist_horizontal < plate_radius
+    stacked = torch.logical_and(stacked, dist_vertical < vertical_tolerance)
+
+    # ---- drawer closed condition ----
+    joint_pos = drawer.data.joint_pos[:, drawer_bottom_joint_id]
+    joint_upper = drawer.data.joint_pos_limits[:, drawer_bottom_joint_id, 1]
+    drawer_closed = joint_pos > (joint_upper * close_ratio)
+
+    done = torch.logical_and(stacked, drawer_closed)
 
     return done

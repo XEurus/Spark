@@ -177,3 +177,257 @@ def reset_object_poses_nut_pour(
     sorting_scale.write_root_pose_to_sim(
         torch.cat([positions_sorting_scale, orientations_sorting_scale], dim=-1), env_ids=env_ids
     )
+
+
+def reset_unload_cans_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    #randomize: bool = False,
+    #randomize_idx: int = -1,
+    #randomize_range: float = 1.0,
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+) -> None:
+    """Reset cans and container for the unload_cans task.
+    - Sample a shared XY offset for this episode (or use a deterministic grid index).
+    - Apply the same offset to both cans and the container in the local env frame.
+    - Place roots around their default poses shifted by ``env.scene.env_origins``.
+    """
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    # base default root states (env-local) for the selected envs
+    can1_root_state = can1.data.default_root_state[env_ids].clone()
+    can2_root_state = can2.data.default_root_state[env_ids].clone()
+    container_root_state = container.data.default_root_state[env_ids].clone()
+
+    # move to world frame around env origins
+    can1_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    can2_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    container_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+
+    # 不进行随机位置初始化
+    # sample shared offset in XY plane
+    #offset_xy = torch.zeros(2, device=can1.device)
+    # if randomize:
+    #     if randomize_idx < 0:
+    #         offset_xy = (randomize_range * 0.2) * torch.rand((2,), device=can1.device) - (
+    #             randomize_range * 0.1
+    #         )
+    #     else:
+    #         column_idx = randomize_idx // 100
+    #         row_idx = randomize_idx % 100
+    #         offset_xy[1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         offset_xy[0] += 0.05 - (0.1 / 99.0) * column_idx
+
+    #can1_root_state[:, 0:2] += offset_xy
+    #can2_root_state[:, 0:2] += offset_xy
+    #container_root_state[:, 0:2] += offset_xy
+
+    can1.write_root_state_to_sim(can1_root_state, env_ids=env_ids)
+    can2.write_root_state_to_sim(can2_root_state, env_ids=env_ids)
+    container.write_root_state_to_sim(container_root_state, env_ids=env_ids)
+
+
+def reset_sort_cans_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    randomize: bool = True,
+    randomize_idx: int = -1,
+    randomize_range: float = 1.0,
+    can_sprite1_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_1"),
+    can_sprite2_cfg: SceneEntityCfg = SceneEntityCfg("can_sprite_2"),
+    can_fanta1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can_fanta2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+) -> None:
+    """Reset the four cans for the sort_cans task.
+
+    Mirrors Ego's ``SortCansEnv._reset_idx``:
+
+    - For each can, start from its default root state.
+    - Optionally randomize XY within a small square (shared range, per-can sample).
+    - If ``randomize_idx >= 0``, use a deterministic grid layout that
+      distinguishes left/right cans.
+    - Finally, shift all roots by ``env.scene.env_origins`` and write
+      them back to the simulation.
+    """
+
+    can_sprite_1 = env.scene[can_sprite1_cfg.name]
+    can_sprite_2 = env.scene[can_sprite2_cfg.name]
+    can_fanta_1 = env.scene[can_fanta1_cfg.name]
+    can_fanta_2 = env.scene[can_fanta2_cfg.name]
+
+    cans = [can_sprite_1, can_sprite_2, can_fanta_1, can_fanta_2]
+
+    for can_idx, can in enumerate(cans):
+        root_state = can.data.default_root_state[env_ids].clone()
+
+        if randomize:
+            if randomize_idx < 0:
+                # uniform noise in XY, scaled by randomize_range
+                noise_xy = (randomize_range * 0.12) * torch.rand(
+                    (len(env_ids), 2), device=can.device
+                ) - (0.06 * randomize_range)
+                root_state[:, 0:2] += noise_xy
+            else:
+                # deterministic grid layout, same logic as Ego:
+                # randomize_idx encodes left/right grid indices.
+                left_cans_idx = randomize_idx // 100
+                left_cans_column_idx = left_cans_idx // 10
+                left_cans_row_idx = left_cans_idx % 10
+
+                right_cans_idx = randomize_idx % 100
+                right_cans_column_idx = right_cans_idx // 10
+                right_cans_row_idx = right_cans_idx % 10
+
+                if can_idx in (0, 2):
+                    # can_sprite_1 and can_fanta_1 (right side)
+                    root_state[:, 1] += 0.06 - (0.12 / 9.0) * right_cans_row_idx
+                    root_state[:, 0] += 0.06 - (0.12 / 9.0) * right_cans_column_idx
+                else:
+                    # can_sprite_2 and can_fanta_2 (left side)
+                    root_state[:, 1] += 0.06 - (0.12 / 9.0) * left_cans_row_idx
+                    root_state[:, 0] += 0.06 - (0.12 / 9.0) * left_cans_column_idx
+
+        # move into world frame around env origins
+        root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+        can.write_root_state_to_sim(root_state, env_ids=env_ids)
+
+
+def reset_stack_can_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    randomize: bool = True,
+    randomize_idx: int = -1,
+    randomize_range: float = 1.0,
+    can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
+    plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
+) -> None:
+    """Reset the can and plate for the stack_can task.
+
+    Mirrors Ego's ``StackCanEnv._reset_idx``:
+
+    - Start from default root states for can and plate.
+    - If ``randomize_idx < 0``, independently randomize XY for both within
+      a square region scaled by ``randomize_range``.
+    - If ``randomize_idx >= 0``, use a deterministic 100x100 grid position
+      shared by can and plate.
+    - Finally, shift both by the environment origins and write to sim.
+    """
+
+    can = env.scene[can_cfg.name]
+    plate = env.scene[plate_cfg.name]
+
+    can_root_state = can.data.default_root_state[env_ids].clone()
+    plate_root_state = plate.data.default_root_state[env_ids].clone()
+
+    if randomize:
+        if randomize_idx < 0:
+            # uniform XY noise in [-0.1, 0.1] scaled by randomize_range
+            plate_noise_xy = (randomize_range * 0.2) * torch.rand(
+                (len(env_ids), 2), device=can.device
+            ) - (0.1 * randomize_range)
+            can_noise_xy = (randomize_range * 0.2) * torch.rand(
+                (len(env_ids), 2), device=can.device
+            ) - (0.1 * randomize_range)
+            plate_root_state[:, 0:2] += plate_noise_xy
+            can_root_state[:, 0:2] += can_noise_xy
+        else:
+            # deterministic 100x100 grid
+            column_idx = randomize_idx // 100
+            row_idx = randomize_idx % 100
+            plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+            plate_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
+            can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+            can_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
+
+    # move into world frame around env origins
+    can_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+    plate_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+
+    can.write_root_state_to_sim(can_root_state, env_ids=env_ids)
+    plate.write_root_state_to_sim(plate_root_state, env_ids=env_ids)
+
+
+def reset_stack_can_into_drawer_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    randomize: bool = True,
+    randomize_idx: int = -1,
+    randomize_range: float = 1.0,
+    can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
+    plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
+    drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
+    drawer_top_joint_id: int = 0,
+    drawer_bottom_joint_id: int = 1,
+    drawer_init_state: str = "open",
+) -> None:
+    """Reset can, plate and drawer for the stack_can_into_drawer task.
+
+    Mirrors Ego's ``StackCanIntoDrawerEnv._reset_idx``:
+
+    - Reset drawer joints to an open or closed configuration.
+    - Optionally randomize XY poses of drawer, can and plate using
+      either continuous noise or a deterministic grid index.
+    - Shift all roots by ``env.scene.env_origins`` and write to sim.
+    """
+
+    can = env.scene[can_cfg.name]
+    plate = env.scene[plate_cfg.name]
+    drawer = env.scene[drawer_cfg.name]
+
+    # ----- reset drawer joints -----
+    joint_pos = drawer.data.default_joint_pos[env_ids].clone()
+
+    bottom_joint_bound = 1 if drawer_init_state == "close" else 0
+    joint_limits = drawer.data.joint_limits
+
+    joint_pos[:, drawer_top_joint_id] = joint_limits[env_ids, drawer_top_joint_id, 1].squeeze()
+    joint_pos[:, drawer_bottom_joint_id] = joint_limits[env_ids, drawer_bottom_joint_id, bottom_joint_bound].squeeze()
+
+    joint_pos = torch.clamp(
+        joint_pos,
+        drawer.data.soft_joint_pos_limits[0, :, 0],
+        drawer.data.soft_joint_pos_limits[0, :, 1],
+    )
+    joint_vel = torch.zeros_like(joint_pos)
+    drawer.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+
+    # ----- reset root poses -----
+    can_root_state = can.data.default_root_state[env_ids].clone()
+    plate_root_state = plate.data.default_root_state[env_ids].clone()
+    drawer_root_state = drawer.data.default_root_state[env_ids].clone()
+
+    # move into world frame around env origins
+    can_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+    plate_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+    drawer_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
+
+    if randomize:
+        if randomize_idx < 0:
+            # shared noise for drawer and can in XY
+            drawer_noise = (randomize_range * 0.1) * torch.rand(
+                (len(env_ids), 2), device=drawer.device
+            ) - (0.05 * randomize_range)
+            drawer_root_state[:, 0:2] += drawer_noise
+            can_root_state[:, 0:2] += drawer_noise
+
+            # independent noise for plate
+            plate_noise = (randomize_range * 0.1) * torch.rand(
+                (len(env_ids), 2), device=plate.device
+            ) - (0.05 * randomize_range)
+            plate_root_state[:, 0:2] += plate_noise
+        else:
+            column_idx = randomize_idx // 100
+            row_idx = randomize_idx % 100
+
+            drawer_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+            plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+            can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+            can_root_state[:, 0] += 0.05 - (0.1 / 99.0) * column_idx
+
+    drawer.write_root_state_to_sim(drawer_root_state, env_ids=env_ids)
+    can.write_root_state_to_sim(can_root_state, env_ids=env_ids)
+    plate.write_root_state_to_sim(plate_root_state, env_ids=env_ids)

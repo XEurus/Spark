@@ -80,19 +80,6 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         ),
     )
 
-    # 地面平面：用于支撑机器人和物体
-    ground = AssetBaseCfg(
-        prim_path="/World/GroundPlane",
-        spawn=GroundPlaneCfg(),
-    )
-
-    # 环境光：增加场景整体照明
-    light = AssetBaseCfg(
-        prim_path="/World/light",
-        spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=3000.0),
-    )
-
-
 @configclass
 class ActionsCfg:
     """动作配置：描述 RL 动作如何映射到 G1 Inspire 机器人。
@@ -332,7 +319,7 @@ class EventCfg:
 
 
 @configclass
-class Open_Laptop_G1_Inspire_EnvCfg(ManagerBasedRLEnvCfg):
+class G1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):
     """打开笔记本任务的总环境配置。
 
     该类汇总了：
@@ -361,7 +348,7 @@ class Open_Laptop_G1_Inspire_EnvCfg(ManagerBasedRLEnvCfg):
     # XR 锚点在世界坐标中的位置和姿态
     xr: XrCfg = XrCfg(
         anchor_pos=(0.0, 0.0, 0.0),
-        anchor_rot=(1.0, 0.0, 0.0, 0.0),
+        anchor_rot=(0.70711,0,0,-0.70711),
     )
 
     # 用于存放从 USD 转为 URDF 后的临时文件目录
