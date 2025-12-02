@@ -120,7 +120,6 @@ def task_done_close_drawer_hand_away(
 
     return done
 
-
 def task_done_open_drawer_hand_away(
     env,
     drawer_cfg: SceneEntityCfg = SceneEntityCfg("object"),
@@ -192,9 +191,6 @@ def task_done_open_drawer_hand_away(
 
     return done
 
-
-
-
 def task_done_pick_place(
     env: ManagerBasedRLEnv,
     task_link_name: str = "",
@@ -258,7 +254,6 @@ def task_done_pick_place(
     done = torch.logical_and(done, object_vel[:, 2] < min_vel)
 
     return done
-
 
 def task_done_nut_pour(
     env: ManagerBasedRLEnv,
@@ -345,7 +340,6 @@ def task_done_nut_pour(
 
     return done
 
-
 def task_done_exhaust_pipe(
     env: ManagerBasedRLEnv,
     blue_exhaust_pipe_cfg: SceneEntityCfg = SceneEntityCfg("blue_exhaust_pipe"),
@@ -388,7 +382,6 @@ def task_done_exhaust_pipe(
     done = torch.logical_and(done, blue_exhaust_to_bin_y < max_blue_exhaust_to_bin_y)
     done = torch.logical_and(done, blue_exhaust_to_bin_y > min_blue_exhaust_to_bin_y)
     done = torch.logical_and(done, blue_exhaust_to_bin_z < max_blue_exhaust_to_bin_z)
-
 
 def task_done_unload_cans(
     env,
@@ -539,13 +532,10 @@ def task_done_stack_can(
     env: "ManagerBasedRLEnv",
     can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
     plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
-    plate_radius: float = 0.09,
+    plate_radius: float = 0.045, # 和柜子等比缩放了
     vertical_tolerance: float = 0.02,
 ) -> torch.Tensor:
-    """Success condition for the stack_can task.
-
-    Mirrors Ego's :meth:`StackCanEnv._get_success`:
-
+    """
     - Compute horizontal (XY) distance between can and plate centers.
     - Compute vertical (Z) distance between can and plate.
     - Task is successful when horizontal distance is within ``plate_radius``
@@ -568,7 +558,6 @@ def task_done_stack_can(
 
     return done
 
-
 def task_done_stack_can_into_drawer(
     env: "ManagerBasedRLEnv",
     can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
@@ -576,7 +565,7 @@ def task_done_stack_can_into_drawer(
     drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
     drawer_bottom_joint_id: int = 1,
     close_ratio: float = 0.90,
-    plate_radius: float = 0.09,
+    plate_radius: float = 0.045, # 和柜子等比缩放了
     vertical_tolerance: float = 0.02,
 ) -> torch.Tensor:
     """Success for stack_can_into_drawer task.

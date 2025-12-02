@@ -41,7 +41,7 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/Can",
     )
     can.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.38, 0.0, 1.02),
+        pos=(0.38, 0.0, 0.712),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
@@ -49,17 +49,21 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/Plate",
     )
     plate.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.65, 0.0, 1.17),
+        pos=(0.7, 0.0, 0.85),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
-    plate.spawn.scale = (0.6, 0.6, 0.6)
+    plate.spawn.scale = (0.35, 0.35, 0.35)
 
     drawer: ArticulationCfg = DRAWER_CFG.replace(
         prim_path="/World/envs/env_.*/Drawer",
     )
-    drawer.spawn.scale = (0.75, 0.75, 0.6)
-    drawer.init_state.pos = (0.53, 0.0, 1.4017)
+    drawer.spawn.scale = (0.6, 0.6, 0.45)
+    drawer.init_state.pos = (0.60, 0.05, 1.0)
     drawer.init_state.rot = (0.0, 0.0, 0.0, 1.0)
+    drawer.init_state.joint_pos = {
+        ".*top_joint": 0.3,
+        ".*bottom_joint": 0.3,
+    }
 
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
@@ -284,9 +288,9 @@ class EventCfg:
         func=mdp.reset_stack_can_into_drawer_objects,
         mode="reset",
         params={
-            "randomize": True,
-            "randomize_idx": -1,
-            "randomize_range": 1.0,
+            # "randomize": True,
+            # "randomize_idx": -1,
+            # "randomize_range": 1.0,
             "can_cfg": SceneEntityCfg("can"),
             "plate_cfg": SceneEntityCfg("plate"),
             "drawer_cfg": SceneEntityCfg("drawer"),
@@ -298,7 +302,7 @@ class EventCfg:
 
 
 @configclass
-class StackCanIntoDrawerG1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):
+class G1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):
     scene: ObjectTableSceneCfg = ObjectTableSceneCfg(
         num_envs=1,
         env_spacing=2.5,

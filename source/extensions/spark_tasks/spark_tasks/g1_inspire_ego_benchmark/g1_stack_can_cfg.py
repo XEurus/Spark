@@ -39,7 +39,7 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/Can",
     )
     can.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.45, -0.25, 1.02),
+        pos=(0.45, -0.25, 0.712),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
 
@@ -47,10 +47,10 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/Plate",
     )
     plate.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.45, 0.0, 1.02),
+        pos=(0.45, 0.0, 0.712),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
-    plate.spawn.scale = (0.6, 0.6, 0.6)
+    plate.spawn.scale = (0.5, 0.5, 0.5) # 和另一个环境里的柜子等比例缩放
 
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
@@ -183,57 +183,21 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         actions = ObsTerm(func=base_mdp.last_action)
-        robot_joint_pos = ObsTerm(
-            func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
-        robot_root_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
-        robot_root_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        )
+        robot_joint_pos = ObsTerm(func=base_mdp.joint_pos,params={"asset_cfg": SceneEntityCfg("robot")})
+        robot_root_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("robot")})
+        robot_root_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("robot")})
         robot_links_state = ObsTerm(func=mdp.get_all_robot_link_state)
 
-        can_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("can")},
-        )
-        can_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("can")},
-        )
-        plate_pos = ObsTerm(
-            func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("plate")},
-        )
-        plate_rot = ObsTerm(
-            func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("plate")},
-        )
+        left_eef_pos = ObsTerm(func=mdp.get_eef_pos,params={"link_name": "left_wrist_yaw_link"})
+        left_eef_quat = ObsTerm(func=mdp.get_eef_quat,params={"link_name": "left_wrist_yaw_link"})
+        right_eef_pos = ObsTerm(func=mdp.get_eef_pos,params={"link_name": "right_wrist_yaw_link"})
+        right_eef_quat = ObsTerm(func=mdp.get_eef_quat,params={"link_name": "right_wrist_yaw_link"})
+        hand_joint_state = ObsTerm(func=mdp.get_robot_joint_state,params={"joint_names": ["R_.*", "L_.*"]})
 
-        left_eef_pos = ObsTerm(
-            func=mdp.get_eef_pos,
-            params={"link_name": "left_wrist_yaw_link"},
-        )
-        left_eef_quat = ObsTerm(
-            func=mdp.get_eef_quat,
-            params={"link_name": "left_wrist_yaw_link"},
-        )
-        right_eef_pos = ObsTerm(
-            func=mdp.get_eef_pos,
-            params={"link_name": "right_wrist_yaw_link"},
-        )
-        right_eef_quat = ObsTerm(
-            func=mdp.get_eef_quat,
-            params={"link_name": "right_wrist_yaw_link"},
-        )
-        hand_joint_state = ObsTerm(
-            func=mdp.get_robot_joint_state,
-            params={"joint_names": ["R_.*", "L_.*"]},
-        )
+        can_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("can")})
+        can_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("can")})
+        plate_pos = ObsTerm(func=base_mdp.root_pos_w,params={"asset_cfg": SceneEntityCfg("plate")})
+        plate_rot = ObsTerm(func=base_mdp.root_quat_w,params={"asset_cfg": SceneEntityCfg("plate")})
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -255,7 +219,6 @@ class TerminationsCfg:
         },
     )
 
-
 @configclass
 class EventCfg:
     reset_all = EventTerm(func=base_mdp.reset_scene_to_default, mode="reset")
@@ -264,22 +227,17 @@ class EventCfg:
         func=mdp.reset_stack_can_objects,
         mode="reset",
         params={
-            "randomize": True,
-            "randomize_idx": -1,
-            "randomize_range": 1.0,
+            # "randomize": True,
+            # "randomize_idx": -1,
+            # "randomize_range": 1.0,
             "can_cfg": SceneEntityCfg("can"),
             "plate_cfg": SceneEntityCfg("plate"),
         },
     )
 
-
 @configclass
-class StackCanG1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):
-    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(
-        num_envs=1,
-        env_spacing=2.5,
-        replicate_physics=True,
-    )
+class G1InspireFTPEnvCfg(ManagerBasedRLEnvCfg):
+    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=1,env_spacing=2.5,replicate_physics=True)
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     terminations: TerminationsCfg = TerminationsCfg()

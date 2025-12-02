@@ -282,16 +282,13 @@ def reset_sort_cans_objects(
 def reset_stack_can_objects(
     env: "ManagerBasedEnv",
     env_ids: torch.Tensor,
-    randomize: bool = True,
-    randomize_idx: int = -1,
-    randomize_range: float = 1.0,
+    # randomize: bool = True,
+    # randomize_idx: int = -1,
+    # randomize_range: float = 1.0,
     can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
     plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
 ) -> None:
-    """Reset the can and plate for the stack_can task.
-
-    Mirrors Ego's ``StackCanEnv._reset_idx``:
-
+    """
     - Start from default root states for can and plate.
     - If ``randomize_idx < 0``, independently randomize XY for both within
       a square region scaled by ``randomize_range``.
@@ -306,25 +303,25 @@ def reset_stack_can_objects(
     can_root_state = can.data.default_root_state[env_ids].clone()
     plate_root_state = plate.data.default_root_state[env_ids].clone()
 
-    if randomize:
-        if randomize_idx < 0:
-            # uniform XY noise in [-0.1, 0.1] scaled by randomize_range
-            plate_noise_xy = (randomize_range * 0.2) * torch.rand(
-                (len(env_ids), 2), device=can.device
-            ) - (0.1 * randomize_range)
-            can_noise_xy = (randomize_range * 0.2) * torch.rand(
-                (len(env_ids), 2), device=can.device
-            ) - (0.1 * randomize_range)
-            plate_root_state[:, 0:2] += plate_noise_xy
-            can_root_state[:, 0:2] += can_noise_xy
-        else:
-            # deterministic 100x100 grid
-            column_idx = randomize_idx // 100
-            row_idx = randomize_idx % 100
-            plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
-            plate_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
-            can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
-            can_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
+    # if randomize:
+    #     if randomize_idx < 0:
+    #         # uniform XY noise in [-0.1, 0.1] scaled by randomize_range
+    #         plate_noise_xy = (randomize_range * 0.2) * torch.rand(
+    #             (len(env_ids), 2), device=can.device
+    #         ) - (0.1 * randomize_range)
+    #         can_noise_xy = (randomize_range * 0.2) * torch.rand(
+    #             (len(env_ids), 2), device=can.device
+    #         ) - (0.1 * randomize_range)
+    #         plate_root_state[:, 0:2] += plate_noise_xy
+    #         can_root_state[:, 0:2] += can_noise_xy
+    #     else:
+    #         # deterministic 100x100 grid
+    #         column_idx = randomize_idx // 100
+    #         row_idx = randomize_idx % 100
+    #         plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         plate_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
+    #         can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         can_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
 
     # move into world frame around env origins
     can_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
@@ -333,13 +330,12 @@ def reset_stack_can_objects(
     can.write_root_state_to_sim(can_root_state, env_ids=env_ids)
     plate.write_root_state_to_sim(plate_root_state, env_ids=env_ids)
 
-
 def reset_stack_can_into_drawer_objects(
     env: "ManagerBasedEnv",
     env_ids: torch.Tensor,
-    randomize: bool = True,
-    randomize_idx: int = -1,
-    randomize_range: float = 1.0,
+    # randomize: bool = True,
+    # randomize_idx: int = -1,
+    # randomize_range: float = 1.0,
     can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
     plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
     drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
@@ -348,9 +344,6 @@ def reset_stack_can_into_drawer_objects(
     drawer_init_state: str = "open",
 ) -> None:
     """Reset can, plate and drawer for the stack_can_into_drawer task.
-
-    Mirrors Ego's ``StackCanIntoDrawerEnv._reset_idx``:
-
     - Reset drawer joints to an open or closed configuration.
     - Optionally randomize XY poses of drawer, can and plate using
       either continuous noise or a deterministic grid index.
@@ -366,15 +359,16 @@ def reset_stack_can_into_drawer_objects(
 
     bottom_joint_bound = 1 if drawer_init_state == "close" else 0
     joint_limits = drawer.data.joint_limits
-
+    print(joint_pos)
     joint_pos[:, drawer_top_joint_id] = joint_limits[env_ids, drawer_top_joint_id, 1].squeeze()
     joint_pos[:, drawer_bottom_joint_id] = joint_limits[env_ids, drawer_bottom_joint_id, bottom_joint_bound].squeeze()
-
+    print(joint_pos)
     joint_pos = torch.clamp(
         joint_pos,
         drawer.data.soft_joint_pos_limits[0, :, 0],
         drawer.data.soft_joint_pos_limits[0, :, 1],
     )
+    print(joint_pos)
     joint_vel = torch.zeros_like(joint_pos)
     drawer.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
@@ -388,28 +382,28 @@ def reset_stack_can_into_drawer_objects(
     plate_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
     drawer_root_state[:, 0:3] += env.scene.env_origins[env_ids, :]
 
-    if randomize:
-        if randomize_idx < 0:
-            # shared noise for drawer and can in XY
-            drawer_noise = (randomize_range * 0.1) * torch.rand(
-                (len(env_ids), 2), device=drawer.device
-            ) - (0.05 * randomize_range)
-            drawer_root_state[:, 0:2] += drawer_noise
-            can_root_state[:, 0:2] += drawer_noise
+    # if randomize:
+    #     if randomize_idx < 0:
+    #         # shared noise for drawer and can in XY
+    #         drawer_noise = (randomize_range * 0.1) * torch.rand(
+    #             (len(env_ids), 2), device=drawer.device
+    #         ) - (0.05 * randomize_range)
+    #         drawer_root_state[:, 0:2] += drawer_noise
+    #         can_root_state[:, 0:2] += drawer_noise
 
-            # independent noise for plate
-            plate_noise = (randomize_range * 0.1) * torch.rand(
-                (len(env_ids), 2), device=plate.device
-            ) - (0.05 * randomize_range)
-            plate_root_state[:, 0:2] += plate_noise
-        else:
-            column_idx = randomize_idx // 100
-            row_idx = randomize_idx % 100
+    #         # independent noise for plate
+    #         plate_noise = (randomize_range * 0.1) * torch.rand(
+    #             (len(env_ids), 2), device=plate.device
+    #         ) - (0.05 * randomize_range)
+    #         plate_root_state[:, 0:2] += plate_noise
+    #     else:
+    #         column_idx = randomize_idx // 100
+    #         row_idx = randomize_idx % 100
 
-            drawer_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
-            plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
-            can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
-            can_root_state[:, 0] += 0.05 - (0.1 / 99.0) * column_idx
+    #         drawer_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         plate_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         can_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         can_root_state[:, 0] += 0.05 - (0.1 / 99.0) * column_idx
 
     drawer.write_root_state_to_sim(drawer_root_state, env_ids=env_ids)
     can.write_root_state_to_sim(can_root_state, env_ids=env_ids)
