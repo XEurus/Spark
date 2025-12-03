@@ -339,8 +339,8 @@ def reset_stack_can_into_drawer_objects(
     can_cfg: SceneEntityCfg = SceneEntityCfg("can"),
     plate_cfg: SceneEntityCfg = SceneEntityCfg("plate"),
     drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
-    drawer_top_joint_id: int = 0,
-    drawer_bottom_joint_id: int = 1,
+    drawer_top_joint_name: str = "top_joint",
+    drawer_bottom_joint_name: str = "bottom_joint",
     drawer_init_state: str = "open",
 ) -> None:
     """Reset can, plate and drawer for the stack_can_into_drawer task.
@@ -353,6 +353,10 @@ def reset_stack_can_into_drawer_objects(
     can = env.scene[can_cfg.name]
     plate = env.scene[plate_cfg.name]
     drawer = env.scene[drawer_cfg.name]
+
+    # resolve joint indices
+    drawer_top_joint_id = drawer.find_joints(drawer_top_joint_name)[0][0]
+    drawer_bottom_joint_id = drawer.find_joints(drawer_bottom_joint_name)[0][0]
 
     # ----- reset drawer joints -----
     joint_pos = drawer.data.default_joint_pos[env_ids].clone()

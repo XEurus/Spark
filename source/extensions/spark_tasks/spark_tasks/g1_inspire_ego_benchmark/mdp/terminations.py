@@ -565,7 +565,7 @@ def task_done_stack_can_into_drawer(
     drawer_cfg: SceneEntityCfg = SceneEntityCfg("drawer"),
     drawer_bottom_joint_id: int = 1,
     close_ratio: float = 0.90,
-    plate_radius: float = 0.045, # 和柜子等比缩放了
+    plate_radius: float = 0.072,
     vertical_tolerance: float = 0.02,
 ) -> torch.Tensor:
     """Success for stack_can_into_drawer task.
@@ -592,8 +592,7 @@ def task_done_stack_can_into_drawer(
     dist_horizontal = torch.norm(diff[:, :2], dim=-1)
     dist_vertical = torch.abs(diff[:, 2])
 
-    stacked = dist_horizontal < plate_radius
-    stacked = torch.logical_and(stacked, dist_vertical < vertical_tolerance)
+    stacked = torch.logical_and(dist_horizontal < plate_radius, dist_vertical < vertical_tolerance)
 
     # ---- drawer closed condition ----
     joint_pos = drawer.data.joint_pos[:, drawer_bottom_joint_id]

@@ -49,21 +49,20 @@ class ObjectTableSceneCfg(object_table_env_cfg.ObjectTableSceneCfg):
         prim_path="/World/envs/env_.*/Plate",
     )
     plate.init_state = RigidObjectCfg.InitialStateCfg(
-        pos=(0.7, 0.0, 0.85),
+        pos=(0.72, 0.1, 0.81),
         rot=(1.0, 0.0, 0.0, 0.0),
     )
-    plate.spawn.scale = (0.35, 0.35, 0.35)
+    plate.spawn.scale = (0.48, 0.48, 0.48) # 等比例缩小
 
     drawer: ArticulationCfg = DRAWER_CFG.replace(
         prim_path="/World/envs/env_.*/Drawer",
     )
-    drawer.spawn.scale = (0.6, 0.6, 0.45)
+    # Migrate from Ego: _update_cfg_mesh logic with mesh_idx=1
+    # The default is 003.usd, we replace it with 001.usd to match Ego's runtime modification
+    drawer.spawn.usd_path = drawer.spawn.usd_path.replace("003.usd", "001.usd")
+    drawer.spawn.scale = (0.6, 0.6, 0.48) # 等比例缩小一些
     drawer.init_state.pos = (0.60, 0.05, 1.0)
-    drawer.init_state.rot = (0.0, 0.0, 0.0, 1.0)
-    drawer.init_state.joint_pos = {
-        ".*top_joint": 0.3,
-        ".*bottom_joint": 0.3,
-    }
+    drawer.init_state.rot = (0, 0, 0, 1)
 
     robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
@@ -294,8 +293,8 @@ class EventCfg:
             "can_cfg": SceneEntityCfg("can"),
             "plate_cfg": SceneEntityCfg("plate"),
             "drawer_cfg": SceneEntityCfg("drawer"),
-            "drawer_top_joint_id": 0,
-            "drawer_bottom_joint_id": 1,
+            "drawer_top_joint_name": "top_joint",
+            "drawer_bottom_joint_name": "bottom_joint",
             "drawer_init_state": "open",
         },
     )
