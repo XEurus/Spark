@@ -412,3 +412,184 @@ def reset_stack_can_into_drawer_objects(
     drawer.write_root_state_to_sim(drawer_root_state, env_ids=env_ids)
     can.write_root_state_to_sim(can_root_state, env_ids=env_ids)
     plate.write_root_state_to_sim(plate_root_state, env_ids=env_ids)
+
+
+def reset_insert_cans_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    # randomize: bool = False,
+    # randomize_idx: int = -1,
+    # randomize_range: float = 1.0,
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+) -> None:
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    # base default root states (env-local) for the selected envs
+    can1_root_state = can1.data.default_root_state[env_ids].clone()
+    can2_root_state = can2.data.default_root_state[env_ids].clone()
+    container_root_state = container.data.default_root_state[env_ids].clone()
+
+    # move to world frame around env origins
+    can1_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    can2_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    container_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+
+    # Deterministic reset (no randomization for now)
+    # If randomization is needed, copy logic from reset_unload_cans_objects or similar.
+
+    can1.write_root_state_to_sim(can1_root_state, env_ids=env_ids)
+    can2.write_root_state_to_sim(can2_root_state, env_ids=env_ids)
+    container.write_root_state_to_sim(container_root_state, env_ids=env_ids)
+
+
+def reset_insert_and_unload_cans_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+) -> None:
+    """Reset cans and container for insert_and_unload_cans task and clear per-episode flags.
+
+    Layout is the same as insert_cans / unload_cans: deterministic positions around env origins.
+    """
+
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    can1_root_state = can1.data.default_root_state[env_ids].clone()
+    can2_root_state = can2.data.default_root_state[env_ids].clone()
+    container_root_state = container.data.default_root_state[env_ids].clone()
+
+    can1_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    can2_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    container_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+
+    can1.write_root_state_to_sim(can1_root_state, env_ids=env_ids)
+    can2.write_root_state_to_sim(can2_root_state, env_ids=env_ids)
+    container.write_root_state_to_sim(container_root_state, env_ids=env_ids)
+
+    # Reset episode-local insert flags used by task_done_insert_and_unload_cans
+    device = env.scene.env_origins.device
+    num_envs_total = env.scene.env_origins.shape[0]
+    if (not hasattr(env, "insert_and_unload_cans_insert1")) or env.insert_and_unload_cans_insert1.shape[0] != num_envs_total:
+        env.insert_and_unload_cans_insert1 = torch.zeros(num_envs_total, dtype=torch.bool, device=device)
+        env.insert_and_unload_cans_insert2 = torch.zeros(num_envs_total, dtype=torch.bool, device=device)
+    env.insert_and_unload_cans_insert1[env_ids] = False
+    env.insert_and_unload_cans_insert2[env_ids] = False
+
+
+def reset_pour_balls_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    bottle_cfg: SceneEntityCfg = SceneEntityCfg("bottle"),
+    bowl_cfg: SceneEntityCfg = SceneEntityCfg("bowl"),
+    ball1_cfg: SceneEntityCfg = SceneEntityCfg("ball1"),
+    ball2_cfg: SceneEntityCfg = SceneEntityCfg("ball2"),
+    ball3_cfg: SceneEntityCfg = SceneEntityCfg("ball3"),
+    ball4_cfg: SceneEntityCfg = SceneEntityCfg("ball4"),
+    ball5_cfg: SceneEntityCfg = SceneEntityCfg("ball5"),
+    ball6_cfg: SceneEntityCfg = SceneEntityCfg("ball6"),
+    ball7_cfg: SceneEntityCfg = SceneEntityCfg("ball7"),
+    ball8_cfg: SceneEntityCfg = SceneEntityCfg("ball8"),
+) -> None:
+    """Reset bottle, bowl and balls for pour_balls task and clear per-episode flags."""
+
+    bottle = env.scene[bottle_cfg.name]
+    bowl = env.scene[bowl_cfg.name]
+    balls_cfg = [ball1_cfg, ball2_cfg, ball3_cfg, ball4_cfg, ball5_cfg, ball6_cfg, ball7_cfg, ball8_cfg]
+    balls = [env.scene[cfg.name] for cfg in balls_cfg]
+
+    bottle_root_state = bottle.data.default_root_state[env_ids].clone()
+    bowl_root_state = bowl.data.default_root_state[env_ids].clone()
+    balls_root_states = [ball.data.default_root_state[env_ids].clone() for ball in balls]
+
+    bottle_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    bowl_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    for root_state in balls_root_states:
+        root_state[:, 0:3] += env.scene.env_origins[env_ids]
+
+    bottle.write_root_state_to_sim(bottle_root_state, env_ids=env_ids)
+    bowl.write_root_state_to_sim(bowl_root_state, env_ids=env_ids)
+    for ball, root_state in zip(balls, balls_root_states):
+        ball.write_root_state_to_sim(root_state, env_ids=env_ids)
+
+    # Reset episode-local pour flags and counts used by task_done_pour_balls
+    device = env.scene.env_origins.device
+    num_envs_total = env.scene.env_origins.shape[0]
+    num_balls = len(balls)
+    if (not hasattr(env, "pour_balls_pass")) or env.pour_balls_pass.shape != (num_envs_total, num_balls):
+        env.pour_balls_pass = torch.zeros((num_envs_total, num_balls), dtype=torch.bool, device=device)
+        env.pour_balls_count = torch.zeros(num_envs_total, dtype=torch.int32, device=device)
+    env.pour_balls_pass[env_ids, :] = False
+    env.pour_balls_count[env_ids] = 0
+
+
+def reset_flip_mug_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    mug_cfg: SceneEntityCfg = SceneEntityCfg("mug"),
+    randomize: bool = False,
+    randomize_idx: int = -1,
+    randomize_range: float = 1.0,
+) -> None:
+    """Reset mug root pose for flip_mug task (Ego-style randomization optional, disabled by default)."""
+
+    mug = env.scene[mug_cfg.name]
+    mug_root_state = mug.data.default_root_state[env_ids].clone()
+
+    # if randomize:
+    #     if randomize_idx < 0:
+    #         noise_xy = (0.2 * randomize_range) * torch.rand((len(env_ids), 2), device=mug.device) - (
+    #             0.1 * randomize_range
+    #         )
+    #         mug_root_state[:, 0:2] += noise_xy
+    #     else:
+    #         column_idx = randomize_idx // 100
+    #         row_idx = randomize_idx % 100
+    #         mug_root_state[:, 1] += 0.1 - (0.2 / 99.0) * row_idx
+    #         mug_root_state[:, 0] += 0.1 - (0.2 / 99.0) * column_idx
+
+    mug_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    mug.write_root_state_to_sim(mug_root_state, env_ids=env_ids)
+
+
+def reset_push_box_objects(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    box_cfg: SceneEntityCfg = SceneEntityCfg("box"),
+    default_goal_pos: tuple[float, float, float] = (0.5, 0.0, 0.687),
+) -> None:
+    """Reset box root pose and goal marker for push_box task.
+
+    Current version keeps a deterministic layout (no randomization of box or goal).
+    The goal marker is lazily created on first reset and updated each reset.
+    """
+    from isaaclab.markers.visualization_markers import VisualizationMarkers
+
+    num_envs = env.scene.num_envs
+    device = env.device
+
+    # Lazily create goal_pos_w buffer and goal_marker
+    if not hasattr(env, "push_box_goal_pos_w"):
+        env.push_box_goal_pos_w = torch.zeros((num_envs, 3), device=device)
+        # Create goal marker from env cfg (goal_cfg is on env.cfg, not env.cfg.scene)
+        env.push_box_goal_marker = VisualizationMarkers(env.cfg.goal_cfg)
+
+    # Reset box
+    box = env.scene[box_cfg.name]
+    box_root_state = box.data.default_root_state[env_ids].clone()
+    box_root_state[:, 0:3] += env.scene.env_origins[env_ids]
+    box.write_root_state_to_sim(box_root_state, env_ids=env_ids)
+
+    # Reset goal position (deterministic, no randomization for now)
+    goal_pos = torch.tensor(default_goal_pos, device=device)
+    env.push_box_goal_pos_w[env_ids] = goal_pos + env.scene.env_origins[env_ids]
+
+    # Update goal marker visualization
+    env.push_box_goal_marker.visualize(env.push_box_goal_pos_w)

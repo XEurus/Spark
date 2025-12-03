@@ -340,6 +340,84 @@ def task_done_nut_pour(
 
     return done
 
+def task_done_pour_balls(
+    env: "ManagerBasedRLEnv",
+    bowl_cfg: SceneEntityCfg = SceneEntityCfg("bowl"),
+    ball1_cfg: SceneEntityCfg = SceneEntityCfg("ball1"),
+    ball2_cfg: SceneEntityCfg = SceneEntityCfg("ball2"),
+    ball3_cfg: SceneEntityCfg = SceneEntityCfg("ball3"),
+    ball4_cfg: SceneEntityCfg = SceneEntityCfg("ball4"),
+    ball5_cfg: SceneEntityCfg = SceneEntityCfg("ball5"),
+    ball6_cfg: SceneEntityCfg = SceneEntityCfg("ball6"),
+    ball7_cfg: SceneEntityCfg = SceneEntityCfg("ball7"),
+    ball8_cfg: SceneEntityCfg = SceneEntityCfg("ball8"),
+    surface_center_offset=(0.0, 0.0, 0.075),
+    surface_radius: float = 0.085,
+    min_poured_balls: int = 3,
+    angle_tolerance_deg: float = 10.0,
+) -> torch.Tensor:
+    """
+    - Compute the bowl surface center from the bowl pose and ``surface_center_offset``.
+    - For each ball, consider the vector from surface center to ball and the bowl surface normal.
+    - When the angle between them is ~90 degrees and the distance to the center is within
+      ``surface_radius``, the ball is counted as poured (only once per episode).
+    - Episode success when at least ``min_poured_balls`` balls have been poured.
+    """
+
+    bowl = env.scene[bowl_cfg.name]
+    balls_cfg = [ball1_cfg, ball2_cfg, ball3_cfg, ball4_cfg, ball5_cfg, ball6_cfg, ball7_cfg, ball8_cfg]
+    balls = [env.scene[cfg.name] for cfg in balls_cfg]
+
+    # positions in env-local frame
+    bowl_pos = bowl.data.root_pos_w - env.scene.env_origins
+    bowl_quat = bowl.data.root_quat_w
+
+    device = bowl_pos.device
+    num_envs = bowl_pos.shape[0]
+
+    # Lazily allocate per-episode buffers
+    if (not hasattr(env, "pour_balls_pass")) or env.pour_balls_pass.shape != (num_envs, len(balls)):
+        env.pour_balls_pass = torch.zeros((num_envs, len(balls)), dtype=torch.bool, device=device)
+        env.pour_balls_count = torch.zeros(num_envs, dtype=torch.int32, device=device)
+
+    # Bowl surface center in env-local frame
+    offset = torch.tensor(surface_center_offset, device=device).expand(num_envs, 3)
+    surface_center = bowl_pos + math_utils.quat_apply(bowl_quat, offset)
+
+    # Surface normal (from bowl root to surface center)
+    surface_normal = surface_center - bowl_pos
+    surface_normal = surface_normal / torch.norm(surface_normal, dim=-1, keepdim=True).clamp_min(1e-6)
+
+    # Angle window around 90 degrees
+    min_angle = 90.0 - angle_tolerance_deg
+    max_angle = 90.0 + angle_tolerance_deg
+
+    # Iterate over balls, update pass flags and counts
+    for idx, ball in enumerate(balls):
+        ball_pos = ball.data.root_pos_w - env.scene.env_origins
+
+        vec = ball_pos - surface_center
+        vec = vec / torch.norm(vec, dim=-1, keepdim=True).clamp_min(1e-6)
+
+        cos_theta = (vec * surface_normal).sum(dim=-1).clamp(-1.0, 1.0)
+        angle = torch.acos(cos_theta) * 180.0 / torch.pi
+
+        dist = torch.norm(surface_center - ball_pos, dim=-1)
+
+        angle_ok = torch.logical_and(angle > min_angle, angle < max_angle)
+        dist_ok = dist < surface_radius
+        pass_now = torch.logical_and(angle_ok, dist_ok)
+
+        already_passed = env.pour_balls_pass[:, idx]
+        new_pass = torch.logical_and(torch.logical_not(already_passed), pass_now)
+
+        env.pour_balls_pass[:, idx] = torch.logical_or(already_passed, pass_now)
+        env.pour_balls_count += new_pass.to(env.pour_balls_count.dtype)
+
+    done = env.pour_balls_count >= min_poured_balls
+# 这边球弹出来后不会重置为未进入状态 和原有一样
+    return done
+
 def task_done_exhaust_pipe(
     env: ManagerBasedRLEnv,
     blue_exhaust_pipe_cfg: SceneEntityCfg = SceneEntityCfg("blue_exhaust_pipe"),
@@ -459,8 +537,76 @@ def task_done_unload_cans(
         done = torch.logical_and(done, both_upright)
 
     return done
-# 子任务应该是还有一个卸载成功（要保持罐子竖起来）和拿起成功、成功到达。
-# 目前ego内不要求罐子竖立，但是与ego代码保持一致，保留这一逻辑。
+def task_done_insert_and_unload_cans(
+    env: "ManagerBasedRLEnv",
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+    container_center_xy=(0.48, 0.0),
+    container_half_extent_xy=(0.16, 0.10),
+    z_threshold: float = 0.85,
+) -> torch.Tensor:
+    """
+    - A can is marked as *inserted* once it lies inside the container XY footprint
+      and below ``z_threshold``.
+    - A can is *unloaded* when it is currently outside the container XY footprint
+      **and** has been inserted before in the same episode.
+    - Episode success when both cans are unloaded.
+    """
+
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    # positions in env-local frame
+    can1_pos = can1.data.root_pos_w - env.scene.env_origins
+    can2_pos = can2.data.root_pos_w - env.scene.env_origins
+    container_pos = container.data.root_pos_w - env.scene.env_origins
+
+    device = container_pos.device
+    num_envs = container_pos.shape[0]
+
+    # Lazily allocate per-env flags that persist across steps in an episode.
+    if (not hasattr(env, "insert_and_unload_cans_insert1")) or env.insert_and_unload_cans_insert1.shape[0] != num_envs:
+        env.insert_and_unload_cans_insert1 = torch.zeros(num_envs, dtype=torch.bool, device=device)
+        env.insert_and_unload_cans_insert2 = torch.zeros(num_envs, dtype=torch.bool, device=device)
+
+    # Container footprint in env-local XY (with offset from current container pose)
+    container_center_ref = torch.tensor(container_center_xy, device=device)
+    container_half_extent = torch.tensor(container_half_extent_xy, device=device)
+    container_xy_lower_ref = container_center_ref - container_half_extent
+    container_xy_upper_ref = container_center_ref + container_half_extent
+
+    offset_xy = container_pos[:, 0:2] - container_center_ref
+    lower_xy = container_xy_lower_ref + offset_xy
+    upper_xy = container_xy_upper_ref + offset_xy
+
+    # Inside/outside checks
+    can1_in_x = torch.logical_and(can1_pos[:, 0] > lower_xy[:, 0], can1_pos[:, 0] < upper_xy[:, 0])
+    can1_in_y = torch.logical_and(can1_pos[:, 1] > lower_xy[:, 1], can1_pos[:, 1] < upper_xy[:, 1])
+    can2_in_x = torch.logical_and(can2_pos[:, 0] > lower_xy[:, 0], can2_pos[:, 0] < upper_xy[:, 0])
+    can2_in_y = torch.logical_and(can2_pos[:, 1] > lower_xy[:, 1], can2_pos[:, 1] < upper_xy[:, 1])
+
+    can1_in_container = torch.logical_and(can1_in_x, can1_in_y)
+    can2_in_container = torch.logical_and(can2_in_x, can2_in_y)
+
+    # World-frame Z for insertion height check (matches Ego logic conceptually)
+    can1_z = can1.data.root_pos_w[:, 2]
+    can2_z = can2.data.root_pos_w[:, 2]
+
+    insert1_now = torch.logical_and(can1_in_container, can1_z <= z_threshold)
+    insert2_now = torch.logical_and(can2_in_container, can2_z <= z_threshold)
+
+    # Once inserted in an episode, the flag stays True until reset
+    env.insert_and_unload_cans_insert1 = torch.logical_or(env.insert_and_unload_cans_insert1, insert1_now)
+    env.insert_and_unload_cans_insert2 = torch.logical_or(env.insert_and_unload_cans_insert2, insert2_now)
+
+    # Unload = currently outside AND has been inserted before in the same episode
+    unload1 = torch.logical_and(torch.logical_not(can1_in_container), env.insert_and_unload_cans_insert1)
+    unload2 = torch.logical_and(torch.logical_not(can2_in_container), env.insert_and_unload_cans_insert2)
+
+    done = torch.logical_and(unload1, unload2)
+    return done
 
 def task_done_sort_cans(
     env: "ManagerBasedRLEnv",
@@ -525,7 +671,8 @@ def task_done_sort_cans(
     sprite_sorted = torch.logical_and(sprite1_in_left, sprite2_in_left)
 
     done = torch.logical_and(fanta_sorted, sprite_sorted)
-
+# 子任务应该是还有一个卸载成功（要保持罐子竖起来）和拿起成功、成功到达。
+# 目前ego内不要求罐子竖立，但是与ego代码保持一致，保留这一逻辑。
     return done
 
 def task_done_stack_can(
@@ -601,4 +748,103 @@ def task_done_stack_can_into_drawer(
 
     done = torch.logical_and(stacked, drawer_closed)
 
+    return done
+
+def task_done_insert_cans(
+    env: "ManagerBasedRLEnv",
+    can1_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_1"),
+    can2_cfg: SceneEntityCfg = SceneEntityCfg("can_fanta_2"),
+    container_cfg: SceneEntityCfg = SceneEntityCfg("container"),
+    container_center_xy=(0.48, 0.0),
+    container_half_extent_xy=(0.16, 0.10),
+    z_above_container: float = 0.05,
+) -> torch.Tensor:
+    """
+    - Check if cans are inside the container.
+    - Success when both cans are within the container's XY bounds and below a Z threshold.
+    """
+    can1 = env.scene[can1_cfg.name]
+    can2 = env.scene[can2_cfg.name]
+    container = env.scene[container_cfg.name]
+
+    # positions in env-local frame
+    can1_pos = can1.data.root_pos_w - env.scene.env_origins
+    can2_pos = can2.data.root_pos_w - env.scene.env_origins
+    container_pos = container.data.root_pos_w - env.scene.env_origins
+
+    device = container_pos.device
+
+    # Base container footprint (in env frame) and its nominal center.
+    container_center_ref = torch.tensor(container_center_xy, device=device)
+    container_half_extent = torch.tensor(container_half_extent_xy, device=device)
+    
+    container_xy_lower_ref = container_center_ref - container_half_extent
+    container_xy_upper_ref = container_center_ref + container_half_extent
+
+    # Infer per-env XY offset from current container position.
+    offset_xy = container_pos[:, 0:2] - container_center_ref
+    lower_xy = container_xy_lower_ref + offset_xy
+    upper_xy = container_xy_upper_ref + offset_xy
+
+    # Check whether cans are inside the container XY box.
+    def in_box(pos, lower, upper):
+        return torch.logical_and(
+            torch.logical_and(pos[:, 0] > lower[:, 0], pos[:, 0] < upper[:, 0]),
+            torch.logical_and(pos[:, 1] > lower[:, 1], pos[:, 1] < upper[:, 1])
+        )
+
+    can1_in_xy = in_box(can1_pos, lower_xy, upper_xy)
+    can2_in_xy = in_box(can2_pos, lower_xy, upper_xy)
+
+    # Check Z height relative to container: can must be below container_z + z_above_container
+    # This is more robust than an absolute threshold since it adapts to env_origins and container placement.
+    z_threshold = container_pos[:, 2] + z_above_container
+    can1_in_z = can1_pos[:, 2] <= z_threshold
+    can2_in_z = can2_pos[:, 2] <= z_threshold
+
+    can1_success = torch.logical_and(can1_in_xy, can1_in_z)
+    can2_success = torch.logical_and(can2_in_xy, can2_in_z)
+
+    done = torch.logical_and(can1_success, can2_success)
+    return done
+
+def task_done_flip_mug(
+    env: "ManagerBasedRLEnv",
+    mug_cfg: SceneEntityCfg = SceneEntityCfg("mug"),
+    up_z_threshold: float = 0.5,
+) -> torch.Tensor:
+    """Success when mug is flipped so its local +Z axis points sufficiently upwards."""
+    mug = env.scene[mug_cfg.name]
+    # z-axis in world frame for each env
+    z_axis = torch.zeros_like(mug.data.root_pos_w)
+    z_axis[:, 2] = 1.0
+    z_mug = math_utils.quat_apply(mug.data.root_quat_w, z_axis)
+    done = z_mug[:, 2] > up_z_threshold
+    return done
+
+def task_done_push_box(
+    env: "ManagerBasedRLEnv",
+    box_cfg: SceneEntityCfg = SceneEntityCfg("box"),
+    default_goal_center_xy=(0.5, 0.0),
+    goal_radius: float = 0.08,
+) -> torch.Tensor:
+    """Success when the box's XY position is within goal_radius of goal position.
+    Uses env.push_box_goal_pos_w if available (set by reset_push_box_objects),
+    otherwise falls back to goal_center_xy parameter.
+    """
+    box = env.scene[box_cfg.name]
+    box_pos_w = box.data.root_pos_w
+    device = box_pos_w.device
+
+    # Use dynamic goal position if available, otherwise use static parameter
+    if hasattr(env, "push_box_goal_pos_w"):
+        goal_pos_w = env.push_box_goal_pos_w
+        dist_xy = torch.norm(box_pos_w[:, :2] - goal_pos_w[:, :2], dim=-1)
+    else:
+        # Fallback: use env-local coordinates with static goal_center_xy
+        box_pos = box_pos_w - env.scene.env_origins
+        goal_center = torch.tensor(default_goal_center_xy, device=device)
+        dist_xy = torch.norm(box_pos[:, :2] - goal_center[None, :], dim=-1)
+
+    done = dist_xy < goal_radius
     return done
